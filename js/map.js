@@ -68,6 +68,11 @@
         const key=a+','+b;let cell=this.cells.get(key);if(!cell){cell=[];this.cells.set(key,cell);}cell.push(o);
       }
     }
+    someRect(x,y,w,h,test){
+      for(let a=Math.floor(x/this.size);a<=Math.floor((x+w)/this.size);a++)for(let b=Math.floor(y/this.size);b<=Math.floor((y+h)/this.size);b++){
+        const cell=this.cells.get(a+','+b);if(cell)for(const o of cell)if(test(o))return true;
+      }return false;
+    }
     some(x,y,r,test){
       for(let a=Math.floor((x-r)/this.size);a<=Math.floor((x+r)/this.size);a++)for(let b=Math.floor((y-r)/this.size);b<=Math.floor((y+r)/this.size);b++){
         const cell=this.cells.get(a+','+b);if(cell)for(const o of cell)if(test(o))return true;

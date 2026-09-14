@@ -17,7 +17,7 @@
     boots:{name:'Botas de trilha',icon:'⌞',description:'Pés: +5% velocidade.',slot:'feet',speed:.05,category:'equipment'},
     backpack:{name:'Mochila de campo',icon:'▣',description:'Carga: +8 slots. Não pode ser removida se a carga não couber.',slot:'pack',capacity:8,category:'equipment'}
   });
-  for(const [id,w] of Object.entries(W.weapons))W.items[id]={name:w.name,icon:'⌐═',description:`Dano ${w.damage}${w.pellets>1?' × '+w.pellets:''} · alcance ${w.range} · pente ${w.magazineSize}.`,category:'weapons',weapon:true};
+  for(const [id,w] of Object.entries(W.weapons))W.items[id]={name:w.name,icon:'⌐═',description:w.melee?`Silenciosa · dano ${w.damage} · alcance ${w.range} · intervalo ${w.fireRate}s. Não atrai infectados pelo som.`:`Dano ${w.damage}${w.pellets>1?' × '+w.pellets:''} · alcance ${w.range} · pente ${w.magazineSize}.`,category:'weapons',weapon:true};
   W.items.ammo.category='weapons';W.items.bandage.category='medicine';
   for(const id of ['wood','scrap','tools'])W.items[id].category='resources';
   W.items.wood.icon='≋';W.items.scrap.description='Metal usado para construir baús.';

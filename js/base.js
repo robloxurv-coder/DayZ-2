@@ -3,7 +3,12 @@
   const W=WL;
   W.base={
     recipes:{shelter:{name:'Abrigo',w:110,h:100,cost:{wood:3}},chest:{name:'Baú',w:30,h:26,cost:{wood:2,scrap:1}},fire:{name:'Fogueira',w:42,h:42,cost:{wood:1}}},
-    canPlace(type,x,y){const G=W.game,r=this.recipes[type];if(!G.running||!r||!Number.isFinite(x)||!Number.isFinite(y)||G.player.health<=0||G.base.length>=12)return false;
+    initialize(){
+      const G=W.game;
+      if(!G.world.buildings.some(b=>b.id==='starter-shelter'))return;
+      G.base.push({id:'base-starter-chest',kind:'chest',type:'chest',x:1025,y:1400,fuel:0,lit:false,storage:[]});
+    },
+    canPlace(type,x,y){if(!this.freeBuilding)return false;const G=W.game,r=this.recipes[type];if(!G.running||!r||!Number.isFinite(x)||!Number.isFinite(y)||G.player.health<=0||G.base.length>=12)return false;
       const b={x:x-r.w/2,y:y-r.h/2,w:r.w,h:r.h},world=G.world;
       if(W.distance({x,y},G.player)>165||b.x<20||b.y<20||b.x+b.w>world.width-20||b.y+b.h>world.height-20||W.rectContains(b,G.player.x,G.player.y,20))return false;
       if(world.buildings.some(o=>b.x<o.x+o.w+30&&b.x+b.w+30>o.x&&b.y<o.y+o.h+45&&b.y+b.h+30>o.y))return false;

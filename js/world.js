@@ -33,15 +33,19 @@ window.WL = window.WL || {};
     return world._trees.some(x,y,r+8,t=>(x-t.x)**2+(y-t.y)**2<(r+7)**2);
   };
   W.move = function(entity,dx,dy,r,world,rects) {
-    if(!W.collides(world,entity.x+dx,entity.y,r,rects))entity.x+=dx;
-    if(!W.collides(world,entity.x,entity.y+dy,r,rects))entity.y+=dy;
+    // Substeps prevent tunnelling through thin fences even after a long frame.
+    const steps=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))/8));
+    for(let i=0;i<steps;i++){
+      if(!W.collides(world,entity.x+dx/steps,entity.y,r,rects))entity.x+=dx/steps;
+      if(!W.collides(world,entity.x,entity.y+dy/steps,r,rects))entity.y+=dy/steps;
+    }
   };
   W.rollLoot = function(category) {
     const qty=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
-    if(category==='starter')return [{id:'water',qty:1},{id:'food',qty:1},{id:'bandage',qty:1},{id:'wood',qty:2}];
+    if(category==='starter')return [{id:'water',qty:1},{id:'food',qty:1},{id:'bandage',qty:1},{id:'wood',qty:2},{id:'bat',qty:1}];
     if(category==='military')return [{id:'ammo',qty:qty(16,32)},{id:['smg','rifle','helmet','bandage'][qty(0,3)],qty:1},{id:'rifleAmmo',qty:qty(5,12)}];
     if(category==='farm')return [{id:'meat',qty:2},{id:'fruit',qty:2},{id:'shells',qty:qty(4,10)},{id:'shotgun',qty:1}];
-    if(category==='workshop')return [{id:'scrap',qty:qty(2,5)},{id:'wood',qty:qty(1,3)},{id:Math.random()<.5?'tools':'water',qty:1}];
+    if(category==='workshop')return [{id:'scrap',qty:qty(2,5)},{id:'wood',qty:qty(1,3)},{id:['tools','water','axe'][qty(0,2)],qty:1}];
     const result=[{id:Math.random()<.5?'food':'water',qty:qty(1,2)}];
     if(Math.random()<.8)result.push({id:'bandage',qty:1});
     if(Math.random()<.45)result.push({id:'ammo',qty:qty(3,8)});
