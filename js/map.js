@@ -24,6 +24,7 @@
         }
         if(k==='terrain'&&!['grass','forest','field','concrete','dirt'].includes(o.kind))throw Error('Terreno desconhecido.');
         if(k==='buildings'&&(!['house','workshop','military','farm'].includes(o.type)||o.w<90||o.h<90))throw Error('Construção inválida.');
+        if(k==='buildings')for(const key of ['interior','furniture'])if(o[key]!==undefined&&(!Array.isArray(o[key])||o[key].length>30||o[key].some(r=>!rect(r)||r.x<o.x||r.y<o.y||r.x+r.w>o.x+o.w||r.y+r.h>o.y+o.h)))throw Error('Interior inválido.');
         if(k==='enemies'&&!['common','runner','tank'].includes(o.kind))throw Error('Infectado inválido.');
         if(k==='poi'&&!number(o.radius,30,2000))throw Error('Raio inválido.');
         if(k==='objects'){
@@ -33,7 +34,7 @@
           if(o.type==='tree'&&(!Number.isInteger(o.shade)||!number(o.shade,0,2)))throw Error('Cor de árvore inválida.');
           if(o.type==='fire'&&(!number(o.fuel,0,600)||typeof o.lit!=='boolean'))throw Error('Fogueira inválida.');
           if(o.type==='crate'){
-            if(!['starter','house','workshop','military','farm'].includes(o.category))throw Error('Categoria de loot inválida.');
+            if(!['starter','house','workshop','military','farm','market','pharmacy','hospital','police','school','office','mansion','shop','warehouse','gas'].includes(o.category))throw Error('Categoria de loot inválida.');
             if(o.items!==null&&(!Array.isArray(o.items)||o.items.length>40||o.items.some(i=>!Object.hasOwn(W.items,i.id)||!Number.isInteger(i.qty)||!number(i.qty,1,9999))))throw Error('Itens de loot inválidos.');
           }
         }
@@ -44,14 +45,16 @@
     build(data){
       const d=this.validate(data),world={width:d.width,height:d.height,mapId:d.id,data:d,roads:d.roads,terrain:d.terrain,poi:d.poi,buildings:[],trees:[],grass:[],cars:[],fences:[],poles:[],crates:[],enemies:[],fires:[],decorations:[]};
       for(const b of d.buildings){
-        const {x,y,w,h}=b;b.doorOpen=false;
+        const {x,y,w,h}=b;b.doorOpen=!!b.initialOpen;
         b.door={x:x+w/2,y:y+h-4,building:b,type:'door'};
         b.walls=[{x,y,w,h:12},{x,y,w:12,h},{x:x+w-12,y,w:12,h},{x,y:y+h-12,w:w/2-25,h:12},{x:x+w/2+25,y:y+h-12,w:w/2-25,h:12}];
+        b.walls.push(...(b.interior||[]));b.furniture=b.furniture||[];
         world.buildings.push(b);
       }
       const groups={tree:'trees',rock:'decorations',car:'cars',fence:'fences',crate:'crates',fire:'fires',pole:'poles'};
       for(const o of d.objects)world[groups[o.type]].push({...o});
       world.crates.forEach(c=>{c.building=world.buildings.find(b=>W.rectContains(b,c.x,c.y))||null;});
+      world.stations=world.buildings.flatMap(b=>(b.furniture||[]).filter(f=>b.role==='base'&&['bed','bench'].includes(f.kind)).map(f=>({x:f.x+f.w/2,y:f.y+f.h/2,type:f.kind,building:b})));
       world.enemies=d.enemies.map((e,i)=>({...e,homeX:e.x,homeY:e.y,angle:i*1.4,hp:e.kind==='tank'?190:e.kind==='runner'?70:100,state:'idle',timer:1+i*.3,attackTimer:0,hitFlash:0,walk:0,dead:false,serial:i}));
       const rng=W.seeded(d.seed||7431);
       for(let i=0;i<2400;i++)world.grass.push({x:rng()*d.width,y:rng()*d.height,n:rng()});
