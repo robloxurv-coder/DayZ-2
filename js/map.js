@@ -41,6 +41,24 @@
       }
       return clone(d);
     },
+    // Bounded local A*: lazy occupancy cache, shared by all agents until a door changes.
+    path(world,start,goal){
+      const size=26,cols=Math.ceil(world.width/size),rows=Math.ceil(world.height/size),rects=W.solidRects(world);
+      if(world._navSignature!==world._signature){world._navSignature=world._signature;world._nav=new Map();}
+      const id=(x,y)=>y*cols+x,point=(x,y)=>({x:x*size+size/2,y:y*size+size/2});
+      const clear=(x,y)=>{if(x<0||y<0||x>=cols||y>=rows)return false;const k=id(x,y);if(!world._nav.has(k)){const p=point(x,y);world._nav.set(k,!W.collides(world,p.x,p.y,11,rects));}return world._nav.get(k);};
+      const sx=Math.floor(start.x/size),sy=Math.floor(start.y/size),gx=Math.floor(goal.x/size),gy=Math.floor(goal.y/size);
+      const h=(x,y)=>Math.hypot(gx-x,gy-y),first={x:sx,y:sy,g:0,f:h(sx,sy),parent:null},open=[first],seen=new Map([[id(sx,sy),0]]);let best=first;
+      for(let n=0;n<380&&open.length;n++){
+        let index=0;for(let i=1;i<open.length;i++)if(open[i].f<open[index].f)index=i;
+        const node=open.splice(index,1)[0];if(h(node.x,node.y)<h(best.x,best.y))best=node;if(node.x===gx&&node.y===gy){best=node;break;}
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]){
+          const x=node.x+dx,y=node.y+dy;if(Math.abs(x-sx)>34||Math.abs(y-sy)>34||!clear(x,y)||dx&&dy&&(!clear(node.x+dx,node.y)||!clear(node.x,node.y+dy)))continue;
+          const cost=node.g+(dx&&dy?1.414:1),key=id(x,y);if((seen.get(key)??Infinity)<=cost)continue;seen.set(key,cost);open.push({x,y,g:cost,f:cost+h(x,y)*1.1,parent:node});
+        }
+      }
+      const path=[];for(let n=best;n.parent;n=n.parent)path.unshift(point(n.x,n.y));return path;
+    },
     empty(width=4000,height=3000){return {version:1,id:'custom',name:'Novo território',width,height,seed:7431,spawn:{x:Math.round(width/2),y:Math.round(height/2)},terrain:[],roads:[],buildings:[],objects:[],enemies:[],poi:[]};},
     build(data){
       const d=this.validate(data),world={width:d.width,height:d.height,mapId:d.id,data:d,roads:d.roads,terrain:d.terrain,poi:d.poi,buildings:[],trees:[],grass:[],cars:[],fences:[],poles:[],crates:[],enemies:[],fires:[],decorations:[]};
