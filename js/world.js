@@ -20,7 +20,7 @@ window.WL = window.WL || {};
     const signature=world.buildings.map(b=>b.doorOpen?'1':'0').join('')+':'+world.buildings.length;
     if(world._signature!==signature){
       const rects=[...world.cars,...world.fences];
-      for(const b of world.buildings){rects.push(...b.walls);if(!b.doorOpen)rects.push({x:b.x+b.w/2-25,y:b.y+b.h-12,w:50,h:12});}
+      for(const b of world.buildings){rects.push(...b.walls,...(b.furniture||[]).filter(f=>!f.passable));if(!b.doorOpen)rects.push({x:b.x+b.w/2-25,y:b.y+b.h-12,w:50,h:12});}
       world._rects=rects;world._signature=signature;world._grid=new W.SpatialGrid();rects.forEach(r=>world._grid.insert(r));
     }
     if(!world._trees){world._trees=new W.SpatialGrid();world.trees.forEach(t=>world._trees.insert(t,t.x-8,t.y-8,16,16));}
@@ -33,19 +33,41 @@ window.WL = window.WL || {};
     return world._trees.some(x,y,r+8,t=>(x-t.x)**2+(y-t.y)**2<(r+7)**2);
   };
   W.move = function(entity,dx,dy,r,world,rects) {
-    if(!W.collides(world,entity.x+dx,entity.y,r,rects))entity.x+=dx;
-    if(!W.collides(world,entity.x,entity.y+dy,r,rects))entity.y+=dy;
+    // Substeps prevent tunnelling through thin fences even after a long frame.
+    const steps=Math.max(1,Math.ceil(Math.max(Math.abs(dx),Math.abs(dy))/8));
+    for(let i=0;i<steps;i++){
+      if(!W.collides(world,entity.x+dx/steps,entity.y,r,rects))entity.x+=dx/steps;
+      if(!W.collides(world,entity.x,entity.y+dy/steps,r,rects))entity.y+=dy/steps;
+    }
   };
-  W.rollLoot = function(category) {
-    const qty=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
-    if(category==='starter')return [{id:'water',qty:1},{id:'food',qty:1},{id:'bandage',qty:1},{id:'wood',qty:2}];
-    if(category==='military')return [{id:'ammo',qty:qty(16,32)},{id:['smg','rifle','helmet','bandage'][qty(0,3)],qty:1},{id:'rifleAmmo',qty:qty(5,12)}];
-    if(category==='farm')return [{id:'meat',qty:2},{id:'fruit',qty:2},{id:'shells',qty:qty(4,10)},{id:'shotgun',qty:1}];
-    if(category==='workshop')return [{id:'scrap',qty:qty(2,5)},{id:'wood',qty:qty(1,3)},{id:Math.random()<.5?'tools':'water',qty:1}];
-    const result=[{id:Math.random()<.5?'food':'water',qty:qty(1,2)}];
-    if(Math.random()<.8)result.push({id:'bandage',qty:1});
-    if(Math.random()<.45)result.push({id:'ammo',qty:qty(3,8)});
-    result.push({id:['dirtyWater','rottenFood','fruit','jacket','trousers','boots'][qty(0,5)],qty:1});
+  W.difficulties={
+    easy:{name:'Fácil',population:.65,loot:1.45,drain:.7,damage:.72,detect:.8,speed:.9},
+    normal:{name:'Normal',population:1,loot:1,drain:1,damage:1,detect:1,speed:1},
+    hard:{name:'Difícil',population:1.4,loot:.7,drain:1.2,damage:1.25,detect:1.15,speed:1.06},
+    nightmare:{name:'Pesadelo',population:1.8,loot:.48,drain:1.45,damage:1.55,detect:1.3,speed:1.12}
+  };
+  W.difficulty=()=>W.difficulties[W.game?.difficulty]||W.difficulties.normal;
+  W.lootTables={
+    house:[['food',1,2],['water',1,2],['cloth',1,4],['knife',1,1],['jacket',1,1],['bandage',1,2],['watch',1,1]],
+    mansion:[['food',1,3],['heavyPistol',1,1],['heavyAmmo',4,12],['watch',1,1],['backpack',1,1],['medicine',1,2],['jacket',1,1]],
+    market:[['food',2,5],['water',2,4],['fruit',1,4],['rottenFood',1,2],['tape',1,2]],
+    hospital:[['medicine',1,3],['bandage',2,5],['cloth',2,4],['water',1,2]],
+    pharmacy:[['medicine',1,2],['bandage',1,4],['water',1,2],['cloth',1,3]],
+    police:[['gun',1,1],['heavyPistol',1,1],['ammo',8,24],['heavyAmmo',5,16],['club',1,1],['shotgun',1,1],['shells',5,12],['suppressor',1,1]],
+    military:[['smg',1,1],['rifle',1,1],['rifleAmmo',8,20],['ammo',12,30],['suppressor',1,1],['helmet',1,1]],
+    workshop:[['scrap',2,6],['tools',1,1],['hammer',1,1],['axe',1,1],['crowbar',1,1],['tape',1,3]],
+    warehouse:[['wood',2,6],['scrap',2,6],['tools',1,1],['tape',1,3],['shovel',1,1]],
+    farm:[['meat',1,3],['fruit',1,4],['shotgun',1,1],['shells',4,10],['machete',1,1]],
+    school:[['cloth',1,3],['water',1,2],['food',1,2],['bat',1,1],['backpack',1,1]],
+    office:[['watch',1,1],['water',1,2],['cloth',1,3],['tape',1,3]],
+    shop:[['food',1,2],['jacket',1,1],['trousers',1,1],['boots',1,1],['cloth',1,4]],
+    gas:[['water',1,3],['food',1,3],['tools',1,1],['scrap',1,3],['tape',1,3]]
+  };
+  W.rollLoot=function(category,rng=Math.random){
+    if(category==='starter')return [{id:'water',qty:1},{id:'food',qty:1},{id:'bandage',qty:1},{id:'wood',qty:2},{id:'bat',qty:1},{id:'cloth',qty:4},{id:'tape',qty:2}];
+    const table=[...(W.lootTables[category]||W.lootTables.house)],result=[],factor=W.difficulty().loot;
+    const count=Math.max(1,Math.min(table.length,Math.round((2+rng()*2)*factor)));
+    for(let i=0;i<count;i++){const [id,min,max]=table.splice(Math.floor(rng()*table.length),1)[0];result.push({id,qty:Math.max(1,Math.round((min+Math.floor(rng()*(max-min+1)))*(W.items[id].weapon||W.items[id].slot?1:factor)))});}
     return result;
   };
 })();

@@ -1,7 +1,7 @@
 'use strict';
 // Synthesized effects only: no downloads or audio files.
 WL.audio = {
-  context:null,master:null,rain:null,rainGain:null,
+  context:null,master:null,rain:null,rainGain:null,noiseCache:new Map(),
   init() {
     try {
       if(!this.context){const AudioCtx=window.AudioContext||window.webkitAudioContext;if(!AudioCtx)return;this.context=new AudioCtx();this.master=this.context.createGain();this.master.connect(this.context.destination);this.setVolume(WL.settings?.volume ?? .5);}
@@ -17,11 +17,15 @@ WL.audio = {
   },
   noise(duration,volume,cutoff=1500){
     if(!this.context||this.context.state!=='running')return;
-    const c=this.context,buffer=c.createBuffer(1,Math.ceil(c.sampleRate*duration),c.sampleRate),data=buffer.getChannelData(0);
-    for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/data.length,2);
+    const c=this.context;let buffer=this.noiseCache.get(duration);if(!buffer){buffer=c.createBuffer(1,Math.ceil(c.sampleRate*duration),c.sampleRate);const data=buffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/data.length,2);if(this.noiseCache.size<16)this.noiseCache.set(duration,buffer);}
     const source=c.createBufferSource(),gain=c.createGain(),filter=c.createBiquadFilter();filter.type='lowpass';filter.frequency.value=cutoff;source.buffer=buffer;source.connect(filter);filter.connect(gain);gain.gain.value=volume;gain.connect(this.master);source.start();
   },
   play(name){
+    if(name.startsWith('shoot-')){const heavy=name==='shoot-shotgun'||name==='shoot-rifle';this.noise(heavy?.2:.13,heavy?.7:.45,3200);this.tone(heavy?75:110,.12,.25,'triangle',32);}
+    if(name==='swing')this.noise(.09,.09,650);
+    if(name==='impact'){this.noise(.07,.19,900);this.tone(95,.06,.1,'triangle',45);}
+    if(name==='fire')this.noise(.18,.035,700);
+    if(name==='infected')this.tone(65,.32,.025,'triangle',48);
     if(name==='shoot'){this.noise(.16,.9,3500);this.tone(105,.14,.45,'triangle',32);}
     if(name==='step')this.noise(.05,.09,500);
     if(name==='attack'){this.noise(.14,.38,800);this.tone(80,.18,.25,'sawtooth',38);}

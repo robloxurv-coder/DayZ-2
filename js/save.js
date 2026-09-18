@@ -3,15 +3,19 @@
 (() => {
   const W=WL,pick=(o,keys)=>Object.fromEntries(keys.map(k=>[k,o[k]]));
   const playerKeys=['x','y','angle','health','hunger','thirst','stamina','temperature','bleeding','ammo','sick'];
-  const enemyKeys=['id','x','y','homeX','homeY','kind','hp','dead','state','angle','timer','attackTimer','serial'];
+  const enemyKeys=['id','x','y','homeX','homeY','kind','hp','dead','state','angle','timer','attackTimer','serial','lastX','lastY'];
   const crateKeys=['id','x','y','type','category','name','items','looted','dropped'];
   const finite=(n,a,b)=>Number.isFinite(n)&&n>=a&&n<=b;
-  W.save={key:'wasteland-save-v1',version:1,error:null,lastSaved:null,disabled:false,
+  W.save={key:'wasteland-save-v1',version:2,error:null,lastSaved:null,disabled:false,
     snapshot(){const G=W.game;if(!G.running||!G.player)throw Error('Nenhuma partida ativa.');if(G.equippedWeapon)G.magazines[G.equippedWeapon]=G.player.ammo;
-      return W.map.clone({version:1,savedAt:Date.now(),map:G.world.data,player:pick(G.player,playerKeys),inventory:G.inventory,stacks:W.inventory.sync(),equipment:G.equipment,equippedWeapon:G.equippedWeapon,magazines:G.magazines,elapsed:G.elapsed,weather:G.weather,weatherTimer:G.weatherTimer,kills:G.kills,looted:G.looted,nextId:G.nextId,base:G.base.map(o=>({...o,doorOpen:G.world.buildings.find(b=>b.id===o.id)?.doorOpen||false})),doors:G.world.buildings.filter(b=>!b.base).map(b=>({id:b.id,open:b.doorOpen})),crates:G.world.crates.map(c=>pick(c,crateKeys)),fires:G.world.fires.filter(f=>!f.kind).map(f=>pick(f,['id','fuel','lit'])),enemies:G.world.enemies.map(e=>pick(e,enemyKeys))});
+      return W.map.clone({version:2,difficulty:G.difficulty,hasWatch:G.hasWatch,hotbar:G.hotbar,secondaryWeapon:G.secondaryWeapon,durability:G.durability,restUntil:G.restUntil,savedAt:Date.now(),map:G.world.data,player:pick(G.player,playerKeys),inventory:G.inventory,stacks:W.inventory.sync(),equipment:G.equipment,equippedWeapon:G.equippedWeapon,magazines:G.magazines,elapsed:G.elapsed,weather:G.weather,weatherTimer:G.weatherTimer,kills:G.kills,looted:G.looted,nextId:G.nextId,base:G.base.map(o=>({...o,doorOpen:G.world.buildings.find(b=>b.id===o.id)?.doorOpen||false})),doors:G.world.buildings.filter(b=>!b.base).map(b=>({id:b.id,open:b.doorOpen,locked:!!b.locked})),crates:G.world.crates.map(c=>pick(c,crateKeys)),fires:G.world.fires.filter(f=>!f.kind).map(f=>pick(f,['id','fuel','lit'])),enemies:G.world.enemies.map(e=>pick(e,enemyKeys))});
     },
     validate(s){
-      if(!s||s.version!==1)throw Error('Versão de save incompatível.');W.map.validate(s.map);
+      if(!s||![1,2].includes(s.version))throw Error('Versão de save incompatível.');
+      if(s.version===1){s.version=2;s.difficulty='normal';s.hasWatch=!!s.inventory?.watch;s.hotbar=['gun','knife','water','food','bandage',null,null,null,null];s.secondaryWeapon=null;s.durability={};s.restUntil=0;}
+      W.map.validate(s.map);
+      if(!Object.hasOwn(W.difficulties,s.difficulty)||typeof s.hasWatch!=='boolean'||!Array.isArray(s.hotbar)||s.hotbar.length!==9||s.hotbar.some(id=>id!==null&&!Object.hasOwn(W.items,id))||!s.durability||Object.entries(s.durability).some(([id,n])=>!W.weapons[id]?.melee||!finite(n,0,100))||!finite(s.restUntil,0,1e9))throw Error('Progresso Beta inválido.');
+      if(s.secondaryWeapon!==null&&(!W.weapons[s.secondaryWeapon]||!s.inventory?.[s.secondaryWeapon]))throw Error('Arma secundária inválida.');
       const point=o=>o&&finite(o.x,0,s.map.width)&&finite(o.y,0,s.map.height),p=s.player;
       if(!point(p)||!finite(p.angle,-1000,1000)||!finite(p.temperature,25,45)||!finite(p.sick,0,25)||typeof p.bleeding!=='boolean'||['health','hunger','thirst','stamina'].some(k=>!finite(p[k],0,100)))throw Error('Atributos inválidos.');
       const quantities=o=>o&&typeof o==='object'&&!Array.isArray(o)&&Object.entries(o).every(([id,q])=>Object.hasOwn(W.items,id)&&Number.isInteger(q)&&finite(q,0,9999));
@@ -34,18 +38,18 @@
       for(const o of s.crates)if(typeof o.id!=='string'||!point(o)||o.type!=='crate'||typeof o.name!=='string'||o.name.length>80||typeof o.looted!=='boolean'||(o.items!==null&&!stackList(o.items)))throw Error('Loot inválido.');
       for(const o of s.doors)if(!s.map.buildings.some(b=>b.id===o.id)||typeof o.open!=='boolean')throw Error('Porta inválida.');
       for(const o of s.fires)if(!s.map.objects.some(f=>f.id===o.id&&f.type==='fire')||typeof o.lit!=='boolean'||!finite(o.fuel,0,600))throw Error('Fogueira inválida.');
-      for(const e of s.enemies)if(!point(e)||!finite(e.hp,-1000,200)||typeof e.dead!=='boolean'||!s.map.enemies.some(v=>v.id===e.id)||!['idle','patrol','chase','dead'].includes(e.state)||!finite(e.angle,-1000,1000)||!finite(e.timer,-1000,1000)||!finite(e.attackTimer,0,10))throw Error('Infectado inválido.');
+      for(const e of s.enemies)if(!point(e)||!finite(e.hp,-1000,200)||typeof e.dead!=='boolean'||(typeof e.id!=='string'||(!s.map.enemies.some(v=>v.id===e.id)&&!/^dyn-\d+$/.test(e.id)))||!['idle','patrol','chase','dead'].includes(e.state)||!finite(e.angle,-1000,1000)||!finite(e.timer,-1000,1000)||!finite(e.attackTimer,0,10))throw Error('Infectado inválido.');
       return s;
     },
     write(){if(this.disabled)return false;try{const s=this.validate(this.snapshot());localStorage.setItem(this.key,JSON.stringify(s));this.lastSaved=s.savedAt;this.error=null;return true;}catch(e){this.error=e.message;return false;}},
     read(){try{const raw=localStorage.getItem(this.key);if(!raw){this.error=null;return null;}if(raw.length>2500000)throw Error('Save excede o limite.');const s=this.validate(JSON.parse(raw));this.error=null;return s;}catch(e){this.error='Não foi possível ler o save: '+e.message;return null;}},
     remove(){try{localStorage.removeItem(this.key);this.lastSaved=null;this.error=null;return true;}catch(e){this.error='O navegador bloqueou a exclusão.';return false;}},
     load(){const s=this.read();if(!s)return false;const G=W.game;
-      try{G.start(s.map);Object.assign(G.player,s.player,{vx:0,vy:0,reload:0,cooldown:0});for(const k of ['inventory','stacks','equipment','equippedWeapon','magazines','elapsed','weather','weatherTimer','kills','looted','nextId','base'])G[k]=s[k];
-        G.base.forEach(o=>W.base.attach(o));for(const d of s.doors)G.world.buildings.find(b=>b.id===d.id).doorOpen=d.open;
+      try{G.start(s.map,s.difficulty);Object.assign(G.player,s.player,{vx:0,vy:0,reload:0,cooldown:0});for(const k of ['inventory','stacks','equipment','equippedWeapon','magazines','elapsed','weather','weatherTimer','kills','looted','nextId','base','difficulty','hasWatch','hotbar','secondaryWeapon','durability','restUntil'])G[k]=s[k];
+        G.base.forEach(o=>W.base.attach(o));for(const d of s.doors)Object.assign(G.world.buildings.find(b=>b.id===d.id),{doorOpen:d.open,locked:!!d.locked});
         G.world.crates=s.crates;G.world.crates.forEach(c=>c.building=G.world.buildings.find(b=>W.rectContains(b,c.x,c.y))||null);
         for(const f of s.fires)Object.assign(G.world.fires.find(o=>o.id===f.id),f);
-        G.world.enemies=s.enemies.map(e=>({...e,hitFlash:0,walk:0}));W.renderer.prepareTerrain(G.world);W.renderer.cameraSnap=true;G.updateTarget();W.ui.updateHUD();W.audio.setRain(G.weather==='rain');this.lastSaved=s.savedAt;if(G.player.health<=0)G.die();W.ui.notify('Partida local restaurada.');return true;
+        G.world.enemies=s.enemies.map(e=>({...e,hitFlash:0,walk:0}));W.renderer.prepareTerrain(G.world);W.renderer.cameraSnap=true;G.updateTarget();W.ui.updateHUD();W.audio.setRain(G.weather==='rain');this.lastSaved=s.savedAt;if(W.collides(G.world,G.player.x,G.player.y,12)){const point=G.world.data.spawn;G.player.x=point.x;G.player.y=point.y;}if(G.player.health<=0)G.die();W.ui.notify('Partida local restaurada.');return true;
       }catch(e){this.error=e.message;return false;}
     }
   };
