@@ -33,6 +33,7 @@
       if(o.building.doorOpen&&worldDoorOccupied(o)){W.ui.notify('A passagem está ocupada.','warn');return;}
       o.building.doorOpen=!o.building.doorOpen;W.audio.play('door');this.updateTarget();
     }else if(o.type==='crate'){
+      if(o.dropped){o.items=o.items.filter(i=>!this.addItem(i.id,i.qty));if(!o.items.length)this.world.crates=this.world.crates.filter(c=>c!==o);W.audio.play('loot');this.updateTarget();W.ui.updateHUD();return;}
       if(o.looted){W.ui.notify('Nada além de poeira. Já foi saqueado.');return;}
       if(o.items===null)o.items=W.rollLoot(o.category);W.ui.openLoot(o);
     }else if(o.type==='fire'){
